@@ -1,0 +1,81 @@
+name: Update Campaign Data
+
+on:
+  schedule:
+    - cron: '0 6 * * *'  # Daily at 6 AM UTC
+  workflow_dispatch:      # Manual trigger anytime
+
+jobs:
+  fetch-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Fetch Airtable Data
+        env:
+          AIRTABLE_TOKEN: ${{ secrets.AIRTABLE_TOKEN }}
+        run: |
+          python3 << 'PYEOF'
+          import urllib.request, urllib.parse, json, os
+
+          token = os.environ['AIRTABLE_TOKEN']
+          base_id = 'appz5sk9uwq3rIH6y'
+          table_id = 'tblEKPHPZIBIAU5w6'
+
+          fields = ['Campaign Name','Client Partner Name','Campaign Start Date','Campaign End Date','Country','Gross Sale (USD)','Main Project Status']
+          filter_formula = "AND(IS_AFTER({Campaign Start Date},'2024-12-31'),IS_BEFORE({Campaign Start Date},'2026-01-01'))"
+          fp = '&'.join(f"fields[]={urllib.parse.quote(f)}" for f in fields)
+          ff = urllib.parse.quote(filter_formula)
+
+          all_records = []
+          offset = None
+          while True:
+              url = f"https://api.airtable.com/v0/{base_id}/{table_id}?{fp}&filterByFormula={ff}&pageSize=100"
+              if offset:
+                  url += f"&offset={offset}"
+              req = urllib.request.Request(url, headers={"Authorization": f"Bearer {token}"})
+              with urllib.request.urlopen(req) as resp:
+                  data = json.loads(resp.read())
+              all_records.extend(data.get("records", []))
+              offset = data.get("offset")
+              if not offset:
+                  break
+
+          # Filter US records
+          us_records = []
+          for r in all_records:
+              countries = r['fields'].get('Country', [])
+              if countries and any('United States' in str(c) for c in countries):
+                  f = r['fields']
+                  start = f.get('Campaign Start Date', '')
+                  month = int(start[5:7]) if start else 0
+                  quarter = 'Q1' if month <= 3 else 'Q2' if month <= 6 else 'Q3' if month <= 9 else 'Q4'
+                  us_records.append({
+                      'name': f.get('Campaign Name', ''),
+                      'exec': (f.get('Client Partner Name') or ['Unknown'])[0],
+                      'start': start,
+                      'end': f.get('Campaign End Date', ''),
+                      'status': f.get('Main Project Status', 'N/A'),
+                      'revenue': f.get('Gross Sale (USD)', 0) or 0,
+                      'quarter': quarter,
+                  })
+
+          output = {
+              'generated_at': __import__('datetime').datetime.utcnow().isoformat() + 'Z',
+              'records': us_records
+          }
+
+          with open('data.json', 'w') as f:
+              json.dump(output, f)
+
+          print(f"Fetched {len(us_records)} US records")
+          PYEOF
+
+      - name: Commit & Push Data
+        run: |
+          git config user.name "Kloi Bot"
+          git config user.email "assistant@eddyjprado.com"
+          git add data.json
+          git diff --staged --quiet || git commit -m "chore: update campaign data $(date -u '+%Y-%m-%d %H:%M UTC')"
+          git push
