@@ -95,6 +95,7 @@
       <option value="">All Statuses</option>
       <option>Finished</option><option>Cancelled</option>
     </select>
+    <select id="filter-advertiser" onchange="applyFilters()"><option value="">All Advertisers</option></select>
   </div>
 
   <main id="main-content">
@@ -115,6 +116,9 @@
         const execs = [...new Set(allRecords.map(r => r.exec))].sort();
         const sel = document.getElementById('filter-exec');
         sel.innerHTML = '<option value="">All Executives</option>' + execs.map(e => `<option>${e}</option>`).join('');
+        const advertisers = [...new Set(allRecords.map(r => r.advertiser).filter(Boolean))].sort();
+        const advSel = document.getElementById('filter-advertiser');
+        advSel.innerHTML = '<option value="">All Advertisers</option>' + advertisers.map(a => `<option>${a}</option>`).join('');
         applyFilters();
       } catch(e) {
         document.getElementById('main-content').innerHTML = '<div class="loading"><span style="color:var(--red)">Failed to load data. Please try again later.</span></div>';
@@ -125,10 +129,12 @@
       const exec = document.getElementById('filter-exec').value;
       const quarter = document.getElementById('filter-quarter').value;
       const status = document.getElementById('filter-status').value;
+      const advertiser = document.getElementById('filter-advertiser').value;
       filteredRecords = allRecords.filter(r =>
         (!exec || r.exec === exec) &&
         (!quarter || r.quarter === quarter) &&
-        (!status || r.status === status)
+        (!status || r.status === status) &&
+        (!advertiser || r.advertiser === advertiser)
       );
       currentPage = 1;
       render();
@@ -168,7 +174,7 @@
         <div class="card">
           <h2>All Projects</h2>
           <div class="table-wrap"><table>
-            <thead><tr><th>Campaign</th><th>Executive</th><th>Q</th><th>Start</th><th>End</th><th>Status</th><th class="text-right">Revenue</th></tr></thead>
+            <thead><tr><th>Campaign</th><th>Executive</th><th>Advertiser</th><th>Q</th><th>Start</th><th>End</th><th>Status</th><th class="text-right">Revenue</th></tr></thead>
             <tbody id="tbl"></tbody>
           </table></div>
           <div class="pagination">
@@ -206,7 +212,7 @@
       const total = filteredRecords.length;
       document.getElementById('tbl').innerHTML = page.map(r => {
         const bc = r.status === 'Finished' ? 'badge-finished' : r.status === 'Cancelled' ? 'badge-cancelled' : 'badge-na';
-        return `<tr><td>${r.name||'—'}</td><td>${r.exec}</td><td>${r.quarter}</td><td>${r.start||'—'}</td><td>${r.end||'—'}</td><td><span class="badge ${bc}">${r.status}</span></td><td class="text-right text-purple">$${r.revenue.toLocaleString()}</td></tr>`;
+        return `<tr><td>${r.name||'—'}</td><td>${r.exec}</td><td>${r.advertiser||'—'}</td><td>${r.quarter}</td><td>${r.start||'—'}</td><td>${r.end||'—'}</td><td><span class="badge ${bc}">${r.status}</span></td><td class="text-right text-purple">$${r.revenue.toLocaleString()}</td></tr>`;
       }).join('');
       document.getElementById('pg-info').textContent = `${start+1}–${Math.min(start+PAGE_SIZE,total)} of ${total}`;
       document.getElementById('btn-p').disabled = currentPage === 1;
